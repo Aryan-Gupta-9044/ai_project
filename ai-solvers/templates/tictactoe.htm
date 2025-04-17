@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tic-Tac-Toe AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #2C3E50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .status {
+            font-size: 18px;
+            text-align: center;
+            margin-bottom: 20px;
+            min-height: 30px;
+            font-weight: 600;
+        }
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-gap: 10px;
+            margin-bottom: 20px;
+        }
+        .cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            font-weight: bold;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .cell:hover {
+            background-color: #e0e0e0;
+        }
+        .cell.x {
+            color: #E74C3C;
+        }
+        .cell.o {
+            color: #3498DB;
+        }
+        .cell.win {
+            background-color: #F1C40F;
+            color: #2C3E50;
+        }
+        .cell.disabled {
+            cursor: not-allowed;
+        }
+        .btn {
+            padding: 10px 15px;
+            background-color: #3498DB;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: block;
+            width: 100%;
+        }
+        .btn:hover {
+            background-color: #2980B9;
+        }
+        .home-btn {
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        .animation {
+            transition: all 0.3s ease;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            margin: 15px 0;
+        }
+        .legend-item {
+            margin: 0 10px;
+            display: flex;
+            align-items: center;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            display: inline-block;
+            margin-right: 5px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tic-Tac-Toe AI</h1>
+    <a href="/" class="btn home-btn">Back to Home</a>
+    
+    <div id="app" class="container">
+        <div class="status">{{ status }}</div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <span class="legend-color" style="background-color: #E74C3C;"></span>
+                <span>You (X)</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background-color: #3498DB;"></span>
+                <span>AI (O)</span>
+            </div>
+        </div>
+        
+        <div class="game-board">
+            <div v-for="(cell, index) in board" 
+                 :key="index" 
+                 class="cell animation" 
+                 :class="{ 
+                    'x': cell === 'X', 
+                    'o': cell === 'O',
+                    'win': winningLine && winningLine.includes(index),
+                    'disabled': cell !== ' ' || gameOver
+                 }"
+                 @click="makeMove(index)">
+                {{ cell !== ' ' ? cell : '' }}
+            </div>
+        </div>
+        
+        <button class="btn" @click="resetGame">New Game</button>
+    </div>
+    
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                board: Array(9).fill(' '),
+                gameOver: false,
+                winner: null,
+                winningLine: null,
+                isDraw: false,
+                status: 'Your turn (X)'
+            },
+            methods: {
+                makeMove(index) {
+                    if (this.board[index] !== ' ' || this.gameOver) {
+                        return;
+                    }
+                    
+                    // Player move
+                    this.board[index] = 'X';
+                    
+                    // Check game state after player move
+                    this.checkGameState();
+                    
+                    if (!this.gameOver) {
+                        this.status = 'AI is thinking...';
+                        
+                        // AI move after a short delay
+                        setTimeout(() => {
+                            this.makeAIMove();
+                        }, 500);
+                    }
+                },
+                
+                makeAIMove() {
+                    fetch('/api/tictactoe/move', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            board: this.board
+                        }),
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            this.status = 'Error: ' + data.error;
+                            return;
+                        }
+                        
+                        // Update board with AI's move
+                        this.board = data.board;
+                        this.winner = data.winner;
+                        this.winningLine = data.winning_line;
+                        this.isDraw = data.is_draw;
+                        this.gameOver = data.game_over;
+                        
+                        this.updateStatus();
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        this.status = 'Error making AI move: ' + error.message;
+                    });
+                },
+                
+                checkGameState() {
+                    // Check for a winner (three X's in a row, column, or diagonal)
+                    const lines = [
+                        [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
+                        [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
+                        [0, 4, 8], [2, 4, 6]             // diagonals
+                    ];
+                    
+                    for (let i = 0; i < lines.length; i++) {
+                        const [a, b, c] = lines[i];
+                        if (this.board[a] !== ' ' && 
+                            this.board[a] === this.board[b] && 
+                            this.board[a] === this.board[c]) {
+                            
+                            this.winner = this.board[a];
+                            this.winningLine = lines[i];
+                            this.gameOver = true;
+                            break;
+                        }
+                    }
+                    
+                    // Check for a draw
+                    if (!this.winner && !this.board.includes(' ')) {
+                        this.isDraw = true;
+                        this.gameOver = true;
+                    }
+                    
+                    this.updateStatus();
+                },
+                
+                updateStatus() {
+                    if (this.winner) {
+                        this.status = this.winner === 'X' ? 'You win!' : 'AI wins!';
+                    } else if (this.isDraw) {
+                        this.status = "It's a draw!";
+                    } else {
+                        this.status = 'Your turn (X)';
+                    }
+                },
+                
+                resetGame() {
+                    this.board = Array(9).fill(' ');
+                    this.gameOver = false;
+                    this.winner = null;
+                    this.winningLine = null;
+                    this.isDraw = false;
+                    this.status = 'Your turn (X)';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

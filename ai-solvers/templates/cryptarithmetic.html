@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cryptarithmetic Solver</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background-color: #f5f5f5; 
+        }
+        h1 { 
+            color: #2C3E50; 
+            text-align: center; 
+            margin-bottom: 30px; 
+        }
+        .container { 
+            background-color: white; 
+            border-radius: 8px; 
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .form-group { 
+            margin-bottom: 15px; 
+        }
+        label { 
+            display: block; 
+            margin-bottom: 5px; 
+            font-weight: bold; 
+            color: #333; 
+        }
+        input[type="text"] { 
+            width: 100%; 
+            padding: 10px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            font-size: 16px; 
+            box-sizing: border-box;
+        }
+        .buttons { 
+            display: flex; 
+            gap: 10px; 
+            margin: 20px 0; 
+        }
+        .btn { 
+            padding: 10px 15px; 
+            background-color: #3498DB; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 14px; 
+        }
+        .btn-clear { 
+            background-color: #e74c3c; 
+        }
+        .btn:hover { 
+            opacity: 0.9; 
+        }
+        .btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .solution { 
+            margin-top: 20px; 
+            padding: 15px; 
+            background-color: #f9f9f9; 
+            border-radius: 4px; 
+            border-left: 4px solid #3498DB; 
+        }
+        .solution h3 { 
+            margin-top: 0; 
+            color: #2C3E50; 
+        }
+        .mapping { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); 
+            gap: 10px; 
+            margin: 15px 0; 
+        }
+        .mapping-item { 
+            background-color: #eee; 
+            padding: 8px; 
+            border-radius: 4px; 
+            text-align: center; 
+        }
+        .equation { 
+            font-family: monospace; 
+            font-size: 18px; 
+            margin: 15px 0; 
+            white-space: pre; 
+        }
+        .home-btn { 
+            display: inline-block;
+            margin-bottom: 20px; 
+        }
+        .loading { 
+            text-align: center; 
+            padding: 20px; 
+            color: #666; 
+        }
+        .examples {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .example-btn {
+            background-color: #f1f1f1;
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .example-btn:hover {
+            background-color: #e9e9e9;
+        }
+    </style>
+</head>
+<body>
+    <h1>Cryptarithmetic Solver</h1>
+    <a href="/" class="btn home-btn">Back to Home</a>
+    
+    <div id="app" class="container">
+        <div class="form-group">
+            <label for="puzzle">Enter Puzzle:</label>
+            <input type="text" id="puzzle" v-model="puzzle" placeholder="e.g., SEND + MORE = MONEY">
+        </div>
+        
+        <div class="examples">
+            <span>Examples:</span>
+            <button class="example-btn" @click="setPuzzle('SEND + MORE = MONEY')">SEND + MORE = MONEY</button>
+            <button class="example-btn" @click="setPuzzle('TWO + TWO = FOUR')">TWO + TWO = FOUR</button>
+            <button class="example-btn" @click="setPuzzle('BASE + BALL = GAMES')">BASE + BALL = GAMES</button>
+        </div>
+        
+        <div class="buttons">
+            <button class="btn" @click="solvePuzzle" :disabled="solving">Solve Puzzle</button>
+            <button class="btn btn-clear" @click="clearAll">Clear</button>
+        </div>
+        
+        <div v-if="solving" class="loading">
+            Solving puzzle...
+        </div>
+        
+        <div v-if="error" class="solution" style="border-left-color: #e74c3c;">
+            <h3>Error</h3>
+            <p>{{ error }}</p>
+        </div>
+        
+        <div v-if="solution && !error" class="solution">
+            <h3>Solution Found!</h3>
+            
+            <h4>Letter to Digit Mapping:</h4>
+            <div class="mapping">
+                <div class="mapping-item" v-for="(value, letter) in solution" :key="letter">
+                    {{ letter }} → {{ value }}
+                </div>
+            </div>
+            
+            <h4>Equation:</h4>
+            <div class="equation">
+                <template v-for="(op, index) in operands">
+                    <div>{{ index === 0 ? '  ' : '+ ' }}{{ op.padStart(maxLength) }}   →   {{ operandValues[index].toString().padStart(resultLength) }}</div>
+                </template>
+                <div>{{ '  ' + '-'.repeat(maxLength) }}   →   {{ '-'.repeat(resultLength) }}</div>
+                <div>= {{ result.padStart(maxLength) }}   →   {{ resultValue.toString().padStart(resultLength) }}</div>
+            </div>
+            
+            <div>
+                <strong>Verification:</strong> {{ operandValues.reduce((a, b) => a + b, 0) === resultValue ? 'Correct ✓' : 'ERROR!' }}
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                puzzle: 'SEND + MORE = MONEY',
+                solution: null,
+                operands: [],
+                operandValues: [],
+                result: '',
+                resultValue: 0,
+                error: null,
+                solving: false,
+                maxLength: 0,
+                resultLength: 0
+            },
+            methods: {
+                setPuzzle(puzzle) {
+                    this.puzzle = puzzle;
+                },
+                
+                solvePuzzle() {
+                    if (!this.puzzle.trim()) {
+                        this.error = "Please enter a puzzle.";
+                        return;
+                    }
+                    
+                    this.solving = true;
+                    this.solution = null;
+                    this.error = null;
+                    
+                    fetch('/api/cryptarithmetic/solve', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            puzzle: this.puzzle
+                        }),
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        this.solving = false;
+                        
+                        if (data.error) {
+                            this.error = data.error;
+                            return;
+                        }
+                        
+                        this.solution = data.solution;
+                        this.operands = data.operands;
+                        this.operandValues = data.operand_values;
+                        this.result = data.result;
+                        this.resultValue = data.result_value;
+                        
+                        // Calculate max length for padding
+                        this.maxLength = Math.max(...[...this.operands, this.result].map(word => word.length));
+                        this.resultLength = Math.max(...[...this.operandValues, this.resultValue].map(num => num.toString().length));
+                    })
+                    .catch(error => {
+                        this.solving = false;
+                        this.error = "An error occurred: " + error.message;
+                    });
+                },
+                
+                clearAll() {
+                    this.puzzle = '';
+                    this.solution = null;
+                    this.operands = [];
+                    this.operandValues = [];
+                    this.result = '';
+                    this.resultValue = 0;
+                    this.error = null;
+                }
+            }
+        });
+    </script>
+</body>
+</html>

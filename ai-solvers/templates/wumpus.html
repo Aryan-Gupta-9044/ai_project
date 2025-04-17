@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Wumpus World</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            max-width: 900px; 
+            margin: 0 auto; 
+            padding: 20px; 
+        }
+        .game-area { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+        }
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(4, 80px); 
+            grid-gap: 5px; 
+            margin: 20px 0; 
+        }
+        .cell { 
+            width: 80px; 
+            height: 80px; 
+            background-color: #f0f0f0; 
+            border: 1px solid #ccc; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            position: relative; 
+            font-size: 12px;
+            text-align: center;
+            transition: background-color 0.3s;
+            flex-direction: column;
+        }
+        .controls { 
+            display: flex; 
+            gap: 10px; 
+            margin-bottom: 20px; 
+        }
+        .btn { 
+            padding: 10px 15px; 
+            background-color: #3498DB; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+        }
+        .btn:hover { 
+            background-color: #2980B9; 
+        }
+        .btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .home-btn { 
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        .status { 
+            margin: 15px 0; 
+            font-weight: bold; 
+            min-height: 50px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .legend { 
+            margin-top: 20px; 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 10px; 
+            justify-content: center;
+        }
+        .legend-item { 
+            display: flex; 
+            align-items: center; 
+            margin-right: 15px; 
+        }
+        .icon { 
+            margin-right: 5px;
+            font-size: 20px; 
+        }
+        h1 {
+            color: #2C3E50;
+            text-align: center;
+        }
+        .agent { 
+            background-color: #3498DB !important; 
+            color: white; 
+        }
+        .wumpus { 
+            background-color: #E74C3C !important; 
+            color: white; 
+        }
+        .gold { 
+            background-color: #F1C40F !important; 
+        }
+        .pit { 
+            background-color: #34495E !important; 
+            color: white; 
+        }
+        .visited { 
+            border: 2px solid #3498DB; 
+        }
+        .cell-icon {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        .percept {
+            font-size: 10px;
+            color: #555;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Wumpus World</h1>
+    <a href="/" class="btn home-btn">Back to Home</a>
+    
+    <div id="app" class="game-area">
+        <div class="controls">
+            <button class="btn" @click="initializeGame">New Game</button>
+            <button class="btn" @click="solveGame" :disabled="solving || gameOver">Solve with AI</button>
+        </div>
+        
+        <div class="status">{{ status }}</div>
+        
+        <div class="grid">
+            <div class="cell" v-for="(cell, index) in board" :key="index" 
+                 :class="getCellClass(index)">
+                <div v-if="getCellIcon(index)" class="cell-icon" v-html="getCellIcon(index)"></div>
+                <div v-if="getCellPercepts(index)" class="percept" v-html="getCellPercepts(index)"></div>
+            </div>
+        </div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <i class="fas fa-user icon" style="color: #3498DB;"></i>
+                <span>Agent</span>
+            </div>
+            <div class="legend-item">
+                <i class="fas fa-dragon icon" style="color: #E74C3C;"></i>
+                <span>Wumpus</span>
+            </div>
+            <div class="legend-item">
+                <i class="fas fa-coins icon" style="color: #F1C40F;"></i>
+                <span>Gold</span>
+            </div>
+            <div class="legend-item">
+                <i class="fas fa-skull-crossbones icon" style="color: #34495E;"></i>
+                <span>Pit</span>
+            </div>
+            <div class="legend-item">
+                <i class="fas fa-wind icon" style="color: #95a5a6;"></i>
+                <span>Breeze</span>
+            </div>
+            <div class="legend-item">
+                <i class="fas fa-smog icon" style="color: #95a5a6;"></i>
+                <span>Stench</span>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                size: 4,
+                board: Array(16).fill(null),
+                agentPosition: [0, 0],
+                wumpusPosition: null,
+                goldPosition: null,
+                pitPositions: [],
+                breezePositions: [],
+                stenchPositions: [],
+                hasGold: false,
+                gameOver: false,
+                won: false,
+                solving: false,
+                status: 'Click "New Game" to start or "Solve with AI" to see the solution.',
+                solution: [],
+                visitedCells: []
+            },
+            mounted() {
+                this.initializeGame();
+            },
+            methods: {
+                initializeGame() {
+                    // Reset everything
+                    this.agentPosition = [0, 0];
+                    this.hasGold = false;
+                    this.gameOver = false;
+                    this.won = false;
+                    this.solving = false;
+                    this.status = 'Game initialized. You are at the bottom-left corner (0,0).';
+                    this.solution = [];
+                    this.visitedCells = [[0, 0]];
+                    
+                    // Create a random game setup
+                    this.goldPosition = [Math.floor(Math.random() * 4), Math.floor(Math.random() * 4)];
+                    while (this.goldPosition[0] === 0 && this.goldPosition[1] === 0) {
+                        this.goldPosition = [Math.floor(Math.random() * 4), Math.floor(Math.random() * 4)];
+                    }
+                    
+                    this.wumpusPosition = [Math.floor(Math.random() * 4), Math.floor(Math.random() * 4)];
+                    while ((this.wumpusPosition[0] === 0 && this.wumpusPosition[1] === 0) ||
+                           (this.wumpusPosition[0] === this.goldPosition[0] && this.wumpusPosition[1] === this.goldPosition[1])) {
+                        this.wumpusPosition = [Math.floor(Math.random() * 4), Math.floor(Math.random() * 4)];
+                    }
+                    
+                    this.pitPositions = [];
+                    const pitCount = Math.floor(Math.random() * 3) + 2; // 2-4 pits
+                    for (let i = 0; i < pitCount; i++) {
+                        let pit = [Math.floor(Math.random() * 4), Math.floor(Math.random() * 4)];
+                        while ((pit[0] === 0 && pit[1] === 0) ||
+                               (pit[0] === this.goldPosition[0] && pit[1] === this.goldPosition[1]) ||
+                               (pit[0] === this.wumpusPosition[0] && pit[1] === this.wumpusPosition[1]) ||
+                               this.pitPositions.some(p => p[0] === pit[0] && p[1] === pit[1])) {
+                            pit = [Math.floor(Math.random() * 4), Math.floor(Math.random() * 4)];
+                        }
+                        this.pitPositions.push(pit);
+                    }
+                    
+                    // Calculate percepts
+                    this.calculatePercepts();
+                },
+                
+                calculatePercepts() {
+                    // Calculate breeze locations (adjacent to pits)
+                    this.breezePositions = [];
+                    for (const pit of this.pitPositions) {
+                        const [x, y] = pit;
+                        const adjacentCells = [
+                            [x+1, y], [x-1, y], [x, y+1], [x, y-1]
+                        ];
+                        
+                        for (const [adjX, adjY] of adjacentCells) {
+                            if (adjX >= 0 && adjX < this.size && adjY >= 0 && adjY < this.size) {
+                                if (!this.breezePositions.some(p => p[0] === adjX && p[1] === adjY)) {
+                                    this.breezePositions.push([adjX, adjY]);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Calculate stench locations (adjacent to wumpus)
+                    this.stenchPositions = [];
+                    const [wx, wy] = this.wumpusPosition;
+                    const adjacentCells = [
+                        [wx+1, wy], [wx-1, wy], [wx, wy+1], [wx, wy-1]
+                    ];
+                    
+                    for (const [adjX, adjY] of adjacentCells) {
+                        if (adjX >= 0 && adjX < this.size && adjY >= 0 && adjY < this.size) {
+                            this.stenchPositions.push([adjX, adjY]);
+                        }
+                    }
+                },
+                
+                solveGame() {
+                    this.solving = true;
+                    this.status = 'AI is thinking...';
+                    this.visitedCells = [[0, 0]];
+                    
+                    // Call the API to solve the game
+                    fetch('/api/wumpus/solve', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            size: this.size,
+                            wumpus_pos: this.wumpusPosition,
+                            gold_pos: this.goldPosition,
+                            pit_positions: this.pitPositions
+                        }),
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            this.status = 'Error: ' + data.error;
+                            this.solving = false;
+                            return;
+                        }
+                        
+                        this.solution = data.agent_path;
+                        this.animateSolution(0);
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        this.status = 'Error solving the game: ' + error.message;
+                        this.solving = false;
+                    });
+                },
+                
+                animateSolution(index) {
+                    if (index >= this.solution.length) {
+                        this.solving = false;
+                        if (this.won) {
+                            this.status = 'AI solved the puzzle successfully!';
+                        } else {
+                            this.status = 'AI failed to solve the puzzle.';
+                        }
+                        return;
+                    }
+                    
+                    const action = this.solution[index];
+                    const actionName = typeof action === 'string' ? action : this.getActionName(action);
+                    this.status = `Step ${index + 1}: ${actionName}`;
+                    
+                    if (action === 'Grab Gold') {
+                        this.hasGold = true;
+                    } else if (action === 'Climb Out') {
+                        this.gameOver = true;
+                        this.won = true;
+                    } else {
+                        // Move action
+                        const [dx, dy] = action;
+                        const newPos = [this.agentPosition[0] + dx, this.agentPosition[1] + dy];
+                        this.agentPosition = newPos;
+                        
+                        // Add to visited cells
+                        if (!this.visitedCells.some(cell => cell[0] === newPos[0] && cell[1] === newPos[1])) {
+                            this.visitedCells.push([...newPos]);
+                        }
+                        
+                        // Check for death
+                        if (this.agentPosition[0] === this.wumpusPosition[0] && this.agentPosition[1] === this.wumpusPosition[1]) {
+                            this.gameOver = true;
+                            this.status = 'Agent was eaten by the Wumpus!';
+                            this.solving = false;
+                            return;
+                        }
+                        
+                        if (this.pitPositions.some(p => p[0] === this.agentPosition[0] && p[1] === this.agentPosition[1])) {
+                            this.gameOver = true;
+                            this.status = 'Agent fell into a pit!';
+                            this.solving = false;
+                            return;
+                        }
+                        
+                        // Check for gold
+                        if (this.agentPosition[0] === this.goldPosition[0] && this.agentPosition[1] === this.goldPosition[1]) {
+                            this.status += ' (Found gold!)';
+                        }
+                    }
+                    
+                    // Continue animation
+                    setTimeout(() => {
+                        this.animateSolution(index + 1);
+                    }, 800);
+                },
+                
+                getActionName(action) {
+                    if (action[0] === 1) return 'Move Up';
+                    if (action[0] === -1) return 'Move Down';
+                    if (action[1] === 1) return 'Move Right';
+                    if (action[1] === -1) return 'Move Left';
+                    return 'Unknown Move';
+                },
+                
+                getCellClass(index) {
+                    const row = Math.floor(index / this.size);
+                    const col = index % this.size;
+                    const classes = [];
+                    
+                    if (row === this.agentPosition[0] && col === this.agentPosition[1]) {
+                        classes.push('agent');
+                    }
+                    
+                    if (row === this.wumpusPosition[0] && col === this.wumpusPosition[1]) {
+                        classes.push('wumpus');
+                    }
+                    
+                    if (row === this.goldPosition[0] && col === this.goldPosition[1] && !this.hasGold) {
+                        classes.push('gold');
+                    }
+                    
+                    if (this.pitPositions.some(p => p[0] === row && p[1] === col)) {
+                        classes.push('pit');
+                    }
+                    
+                    if (this.visitedCells.some(cell => cell[0] === row && cell[1] === col) && 
+                        !(row === this.agentPosition[0] && col === this.agentPosition[1])) {
+                        classes.push('visited');
+                    }
+                    
+                    return classes.join(' ');
+                },
+                
+                getCellIcon(index) {
+                    const row = Math.floor(index / this.size);
+                    const col = index % this.size;
+                    
+                    if (row === this.agentPosition[0] && col === this.agentPosition[1]) {
+                        return '<i class="fas fa-user"></i>';
+                    }
+                    
+                    if (row === this.wumpusPosition[0] && col === this.wumpusPosition[1]) {
+                        return '<i class="fas fa-dragon"></i>';
+                    }
+                    
+                    if (row === this.goldPosition[0] && col === this.goldPosition[1] && !this.hasGold) {
+                        return '<i class="fas fa-coins"></i>';
+                    }
+                    
+                    if (this.pitPositions.some(p => p[0] === row && p[1] === col)) {
+                        return '<i class="fas fa-skull-crossbones"></i>';
+                    }
+                    
+                    return '';
+                },
+                
+                getCellPercepts(index) {
+                    const row = Math.floor(index / this.size);
+                    const col = index % this.size;
+                    
+                    let percepts = [];
+                    
+                    if (this.breezePositions.some(p => p[0] === row && p[1] === col)) {
+                        percepts.push('<i class="fas fa-wind"></i>');
+                    }
+                    
+                    if (this.stenchPositions.some(p => p[0] === row && p[1] === col)) {
+                        percepts.push('<i class="fas fa-smog"></i>');
+                    }
+                    
+                    return percepts.join(' ');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
